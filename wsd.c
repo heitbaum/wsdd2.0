@@ -559,7 +559,7 @@ static int wsd_send_msg(int fd, struct endpoint *ep, const _saddr_t *sa,
 
 	char ip[_ADDRSTRLEN];
 	inet_ntop(sa->ss.ss_family, _SIN_ADDR(sa), ip, sizeof ip);
-	DEBUG(3, W, "WSD-TO %s port %u (fd=%d,len=%ld,sent=%d) '%s'\n", ip, _SIN_PORT(sa), fd,
+	DEBUG(3, W, "WSD-TO %s port %u (fd=%d,len=%zu,sent=%d) '%s'\n", ip, _SIN_PORT(sa), fd,
 		msglen, ret, msg);
 
 	return ret != (int) msglen;
@@ -1255,7 +1255,7 @@ static int wsd_process_message(int fd, struct endpoint *ep, _saddr_t *sa,
 	{
 		char ip[_ADDRSTRLEN];
 		inet_ntop(sa->ss.ss_family, _SIN_ADDR(sa), ip, sizeof ip);
-		DEBUG(3, W, "WSD-FROM %s port %u (fd=%d,len=%ld): '%s'\n", ip, _SIN_PORT(sa), fd, len, buf);
+		DEBUG(3, W, "WSD-FROM %s port %u (fd=%d,len=%zd): '%s'\n", ip, _SIN_PORT(sa), fd, len, buf);
 	}
 
 	if (ep->type == SOCK_STREAM && strncmp(buf, "POST ", 5) == 0) {
@@ -1265,7 +1265,7 @@ static int wsd_process_message(int fd, struct endpoint *ep, _saddr_t *sa,
 		{
 			char ip[_ADDRSTRLEN];
 			inet_ntop(sa->ss.ss_family, _SIN_ADDR(sa), ip, sizeof ip);
-			DEBUG(3, W, "WSD-BODY %s port %u (fd=%d,status=%d,len=%ld): '%s'\n", ip, _SIN_PORT(sa),
+			DEBUG(3, W, "WSD-BODY %s port %u (fd=%d,status=%d,len=%zu): '%s'\n", ip, _SIN_PORT(sa),
 				fd, status, strlen(buf), buf);
 		}
 
