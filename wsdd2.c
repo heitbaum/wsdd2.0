@@ -674,8 +674,12 @@ static void find_config_file()
 		free(config_file);
 }
 
+static void init_sysinfo();
+
 static void help(const char *prog, int ec, const char *fmt, ...)
 {
+	init_sysinfo();
+
 	if (fmt) {
 		va_list ap;
 		va_start(ap, fmt);
@@ -770,13 +774,12 @@ int main(int argc, char **argv)
 	int opt;
 	const char *prog = basename(argv[0]);
 	unsigned int ipv46 = 0, tcpudp = 0, llmnrwsdd = 0;
-
-	init_sysinfo();
+	bool print_help = false;
 
 	while ((opt = getopt(argc, argv, "hd46utlwLWi:H:A:N:B:G:b:c:")) != -1) {
 		switch (opt) {
 		case 'h':
-			help(prog, EXIT_SUCCESS, NULL);
+			print_help = true;
 			break;
 		case 'd':
 			is_daemon = true;
@@ -856,6 +859,11 @@ int main(int argc, char **argv)
 
 	if (argc > optind)
 		help(prog, EXIT_FAILURE, "Unknown argument '%s'", argv[optind]);
+
+	if (print_help)
+		help(prog, EXIT_SUCCESS, NULL);
+
+	init_sysinfo();
 
 	if (!ipv46)
 		ipv46 = _4 | _6;
