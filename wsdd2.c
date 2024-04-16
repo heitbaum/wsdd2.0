@@ -696,7 +696,7 @@ int main(int argc, char **argv)
 
 	init_sysinfo();
 
-	while ((opt = getopt(argc, argv, "hd46utlwLWi:H:N:G:b:")) != -1) {
+	while ((opt = getopt(argc, argv, "hd46utlwLWi:H:A:N:B:G:b:")) != -1) {
 		switch (opt) {
 		case 'h':
 			help(prog, EXIT_SUCCESS, NULL);
@@ -743,9 +743,17 @@ int main(int argc, char **argv)
 			if (optarg != NULL && strlen(optarg) > 0)
 				hostname = strdup(optarg);
 			break;
+		case 'A':
+			if (optarg != NULL && strlen(optarg) > 0)
+				hostaliases = strdup(optarg);
+			break;
 		case 'N':
 			if (optarg != NULL && strlen(optarg) > 0)
 				netbiosname = strdup(optarg);
+			break;
+		case 'B':
+			if (optarg != NULL && strlen(optarg) > 0)
+				netbiosaliases = strdup(optarg);
 			break;
 		case 'G':
 			if (optarg != NULL && strlen(optarg) > 0)
@@ -757,7 +765,7 @@ int main(int argc, char **argv)
 					help(prog, EXIT_FAILURE, "Bad key:val '%s'", optarg);
 			break;
 		case '?':
-			if (strchr("iHNGb", optopt))
+			if (strchr("iHNAGBb", optopt))
 				printf("Option -%c requires an argument.\n", optopt);
 			/* ... fall through ... */
 		default:
