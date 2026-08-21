@@ -924,6 +924,7 @@ static int wsd_parse_http_header(int fd, struct endpoint *ep,
 
 again:
 #define HEADER_IS(p,h) (strncasecmp((p), (h), strlen((h))) ? NULL : (p) + strlen(h))
+	eol = NULL;
 	while (*p && (eol = strstr(p, "\r\n")) != p) {
 		const char *val;
 
@@ -949,14 +950,25 @@ again:
 	}
 
 	bool eoh = false;
-	if (eol == p) {
+	if (eol && eol == p) {
 		p = eol + 2;
 		eoh = true;
 	}
-	memmove(buf, p, len -= (p - buf));
+	size_t consumed = (size_t) (p - buf);
+	if (consumed > len) {
+		ep->errstr = __FUNCTION__ ": Invalid header state";
+		return 400;
+	}
+	len -= consumed;
+	memmove(buf, p, len);
+	p = buf;
 	buf[len] = '\0';
 
 	if (!eoh) { /* Have not reached end of header. */
+		if (len >= bsize - 1) {
+			ep->errstr = __FUNCTION__ ": Header too large";
+			return 400;
+		}
 		ssize_t len2 = recv(fd, buf + len, bsize - len - 1, 0);
 
 		if (len2 <= 0) {
