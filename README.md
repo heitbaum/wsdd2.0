@@ -16,8 +16,8 @@ NOTE: Make sure there is no firewall rule blocking WSD multicast address
 239.255.255.250 and ff02::c, protocol UDP port 3702. Unicast SOAP HTTP
 WS-Discovery responder listens on TCP port 3702.
 
-LLMNR responder listens on multicast 224.0.0.252 / ff02::1:3 UDP port 5355
-and unicast TCP port 5355.
+LLMNR responder listens on multicast 224.0.0.252 / ff02::1:3 UDP port 5355.
+LLMNR over TCP is not implemented and no TCP port 5355 listener is opened.
 
 The original source code was taken from Netgear ReadyNAS OS v6.9.3 published at
 https://kb.netgear.com/2649/NETGEAR-Open-Source-Code-for-Programmers-GPL

@@ -33,7 +33,7 @@ response to Probe and Resolve queries respectively over UDP, and sends
 HTTP reponse messages to HTTP property query POST messages over TCP.
 .PP
 \fBwsdd2\fR's LLMNR protocol handler responds to LLMNR multicast query
-messages over UDP and to LLMNR unicast query messages over TCP.
+messages over UDP. LLMNR over TCP is not implemented.
 .PP
 \fBwsdd2\fR uses and listens on the following ports:
 .PP
@@ -51,12 +51,6 @@ WSDD property query over HTTP.
 .RS 4
 LLMNR query multicast group addresses 224.0.0.252 and ff02::1:3.
 .RE
-.PP
-5355 TCP
-.RS 4
-LLMNR query unicast.
-.RE
-
 .SH "OPTIONS"
 .PP
 \-h
