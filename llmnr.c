@@ -173,7 +173,11 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 	in_name = strdup("");
 	in_name_len = 0;
 	in_name_p = &in[12];
-	while (*in_name_p > 0) {
+	const uint8_t *in_end = in + inlen;
+	while (in_name_p < in_end && *in_name_p > 0) {
+		size_t remaining = in_end - in_name_p;
+		size_t label_len = *in_name_p;
+
 		/*
 		 * not supporting message compression
 		 * see section 4.1.4 of RFC 1035
@@ -184,8 +188,15 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 			return -1;
 		}
 
+		/* The label body and its terminating byte must fit in the packet. */
+		if (remaining <= label_len + 1) {
+			DEBUG(1, L, "llmnr: label runs past end of packet");
+			free(in_name);
+			return -1;
+		}
+
 		/* append to the whole name */
-		in_name_len += *in_name_p + (*in_name ? 1 : 0); // '.' if not first
+		in_name_len += label_len + (*in_name ? 1 : 0); // '.' if not first
 
 		in_name = (char *) realloc(in_name, in_name_len + 1);
 		if (in_name == NULL) {
@@ -193,10 +204,10 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 			return -1;
 		}
 		if (*in_name) strcat(in_name, ".");
-		strncat(in_name, (const char *) in_name_p + 1, *in_name_p);
+		strncat(in_name, (const char *) in_name_p + 1, label_len);
 
 		/* next label */
-		in_name_p += *in_name_p + 1;
+		in_name_p += label_len + 1;
 	}
 
 	/* verify in_name_len */
@@ -214,6 +225,13 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 	 * this implementation only supports questions of type A
 	 * or AAAA
 	 */
+	/* Need the name terminator plus the 4 bytes of QTYPE and QCLASS. */
+	if (in_name_p >= in_end || (size_t) (in_end - in_name_p) < 5) {
+		DEBUG(1, L, "llmnr: question section truncated");
+		free(in_name);
+		return -1;
+	}
+
 	qtype = in_name_p[1] * 256 + in_name_p[2];
 	if (qtype != DNS_TYPE_ANY && qtype != DNS_TYPE_A && qtype != DNS_TYPE_AAAA) {
 		DEBUG(1, L, "llmnr: record in question not of type ANY or A or AAAA: %#x", qtype);
