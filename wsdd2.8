@@ -148,6 +148,12 @@ Set WSDD query over HTTP response values in a comma-delimited list. The
 valid/necessary keys are: \fBvendor, model, serial, sku, vendorurl,
 modelurl, presentationurl\fR.
 .br
+Each pair is delimited by a comma. Within a pair the key ends at the
+first colon or blank, and the value is everything up to the next comma,
+so a value may itself contain colons and blanks - a URL needs no
+quoting beyond keeping the whole list as one argument. A value may not
+contain a comma. An unknown key is an error.
+.br
 This option overrides /proc/sys/dev/boot/info readouts.
 .RE
 
@@ -177,7 +183,8 @@ Value retrieved from /proc/sys/dev/boot/info or set with the -b option or
 .PP
 SKU
 .RS 4
-Value retrieved from /proc/sys/dev/boot/info or set with the -b option.
+Accepted from /proc/sys/dev/boot/info and the -b option, but not
+reported: the device metadata has no element to carry it.
 .RE
 .PP
 ModelURL
@@ -234,9 +241,17 @@ messages.
 .SH "STANDARDS"
 .PP
 The WSDD protocol is described in detail in "Web Services Dynamic Discovery
-(WS-Discovery) Version 1.1" OASYS Standard, 1 July 2009
+(WS-Discovery) Version 1.1" OASIS Standard, 1 July 2009
 .br
 http://docs.oasis-open.org/ws-dd/discovery/1.1/os/wsdd-discovery-1.1-spec-os.html
+.PP
+The device metadata returned over HTTP is described in "Devices Profile for
+Web Services (DPWS) Version 1.1" OASIS Standard, 1 July 2009
+.br
+http://docs.oasis-open.org/ws-dd/dpws/1.1/os/wsdd-dpws-1.1-spec-os.html
+.PP
+Note that the XML namespaces on the wire are the earlier drafts those two
+standards grew out of, since that is what the Windows WSD client speaks.
 .PP
 LLMNR complies with RFC4795.
 

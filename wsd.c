@@ -213,11 +213,11 @@ int set_getresp(const char *str, const char **next)
 		goto exit;
 	val = p;
 
-	/* Look for end of value. */
-	while (*p && *p != ':' && *p != ',')
+	/* Look for end of value.  Only a comma ends a value: the key was
+	   already delimited by the first colon, so a colon here belongs to
+	   the value, as it does in every URL the table accepts. */
+	while (*p && *p != ',')
 		p++;
-	if (*p && *p != ',')
-		goto exit;
 
 	vallen = p - val;
 	if (next)
@@ -232,7 +232,7 @@ int set_getresp(const char *str, const char **next)
 		return -1;
 
 	if (!bootinfo[i].value)
-		bootinfo[i].value = strndup(val, vallen + 1);
+		bootinfo[i].value = strndup(val, vallen);
 
 	return 0;
 
@@ -857,7 +857,7 @@ static int wsd_send_get_response(int fd,
 	ssize_t len = asprintf(&body, body_templ,
 				"Microsoft Publication Service Device Host",
 				"1.0",
-				"20050718",
+				get_getresp("serial:"),
 				get_getresp("vendor:"),
 				get_getresp("vendorurl:"),
 				get_getresp("model:"),
