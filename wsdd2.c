@@ -65,6 +65,18 @@ static struct ifaddrs *ifaddrs_list = NULL;
 
 static int netlink_recv(struct endpoint *ep);
 
+static const void *sockaddr_addr(const struct sockaddr *sa)
+{
+	switch (sa->sa_family) {
+	case AF_INET:
+		return &((const struct sockaddr_in *)sa)->sin_addr;
+	case AF_INET6:
+		return &((const struct sockaddr_in6 *)sa)->sin6_addr;
+	default:
+		return NULL;
+	}
+}
+
 static struct service services[] = {
 	{
 		.name	= "wsdd-mcast-v4",
@@ -171,7 +183,8 @@ int connected_if(const _saddr_t *sa, _saddr_t *ci)
 		size_t alen;
 
 		if (ifa->ifa_flags & IFF_SLAVE || !ifa->ifa_netmask ||
-			!ifa->ifa_addr || ifa->ifa_addr->sa_family != sa->sa.sa_family)
+			!ifa->ifa_addr || ifa->ifa_addr->sa_family != sa->sa.sa_family ||
+			ifa->ifa_netmask->sa_family != sa->sa.sa_family)
 			continue;
 
 		if (ifindex && if_nametoindex(ifa->ifa_name) != ifindex)
@@ -179,26 +192,26 @@ int connected_if(const _saddr_t *sa, _saddr_t *ci)
 
 		if (debug_W >= 4) {
 			char ifa_addr[_ADDRSTRLEN], ifa_netmask[_ADDRSTRLEN], sa_addr[_ADDRSTRLEN];
-			if (!inet_ntop(ifa->ifa_addr->sa_family, _SIN_ADDR((_saddr_t *)ifa->ifa_addr), ifa_addr, sizeof(ifa_addr)))
+			if (!inet_ntop(ifa->ifa_addr->sa_family, sockaddr_addr(ifa->ifa_addr), ifa_addr, sizeof(ifa_addr)))
 				ifa_addr[0] = '\0';
 			if (!inet_ntop(sa->sa.sa_family, _SIN_ADDR(sa), ifa_netmask, sizeof(ifa_netmask)))
 				ifa_netmask[0] = '\0';
-			if (!inet_ntop(ifa->ifa_netmask->sa_family, _SIN_ADDR((_saddr_t *)ifa->ifa_netmask), sa_addr, sizeof(sa_addr)))
+			if (!inet_ntop(ifa->ifa_netmask->sa_family, sockaddr_addr(ifa->ifa_netmask), sa_addr, sizeof(sa_addr)))
 				sa_addr[0] = '\0';
 			DEBUG(4, W, "%s: %s: if=%s nm=%s sc=%s", __func__, ifa->ifa_name, ifa_addr, ifa_netmask, sa_addr);
 		}
 
 		switch (sa->ss.ss_family) {
 		case AF_INET:
-			_if = (uint8_t *) &((_saddr_t *)ifa->ifa_addr)->in.sin_addr;
-			_nm = (uint8_t *) &((_saddr_t *)ifa->ifa_netmask)->in.sin_addr;
+			_if = (const uint8_t *) sockaddr_addr(ifa->ifa_addr);
+			_nm = (const uint8_t *) sockaddr_addr(ifa->ifa_netmask);
 			_sa = (uint8_t *) &sa->in.sin_addr;
 			_ca = (uint8_t *) &ci->in.sin_addr;
 			alen = sizeof(sa->in.sin_addr);
 			break;
 		case AF_INET6:
-			_if = (uint8_t *) &((_saddr_t *)ifa->ifa_addr)->in6.sin6_addr;
-			_nm = (uint8_t *) &((_saddr_t *)ifa->ifa_netmask)->in6.sin6_addr;
+			_if = (const uint8_t *) sockaddr_addr(ifa->ifa_addr);
+			_nm = (const uint8_t *) sockaddr_addr(ifa->ifa_netmask);
 			_sa = (uint8_t *) &sa->in6.sin6_addr;
 			_ca = (uint8_t *) &ci->in6.sin6_addr;
 			alen = sizeof(sa->in6.sin6_addr);
@@ -848,7 +861,7 @@ again:
 					continue;
 
 				char ifaddr[_ADDRSTRLEN];
-				void *addr = _SIN_ADDR((_saddr_t *)ifa->ifa_addr);
+				const void *addr = sockaddr_addr(ifa->ifa_addr);
 				inet_ntop(ifa->ifa_addr->sa_family, addr, ifaddr, sizeof(ifaddr));
 
 				if (ifname && strcmp(ifa->ifa_name, ifname) != 0) {
