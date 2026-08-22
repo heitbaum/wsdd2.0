@@ -75,9 +75,9 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 {
 	uint16_t qdcount, ancount, nscount;
 	uint16_t qtype, qclass;
-	char *in_name, *out = NULL;
+	char in_name[256], *out = NULL;
 	const uint8_t *in_name_p = NULL;
-	size_t in_name_len, out_name_len = 0;
+	size_t in_name_len, wire_name_len = 0, out_name_len = 0;
 	size_t answer_len = 0;
 	int ret;
 	_saddr_t ci;
@@ -170,7 +170,7 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 	}
 
 	/* process all labels in question section */
-	in_name = strdup("");
+	in_name[0] = '\0';
 	in_name_len = 0;
 	in_name_p = &in[12];
 	const uint8_t *in_end = in + inlen;
@@ -182,39 +182,39 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 		 * not supporting message compression
 		 * see section 4.1.4 of RFC 1035
 		 */
-		if (*in_name_p >= 0xC0) {
-			DEBUG(1, L, "llmnr: message compression not supported");
-			free(in_name);
+		if (label_len > 63) {
+			DEBUG(1, L, "llmnr: invalid or compressed label");
 			return -1;
 		}
 
 		/* The label body and its terminating byte must fit in the packet. */
 		if (remaining <= label_len + 1) {
 			DEBUG(1, L, "llmnr: label runs past end of packet");
-			free(in_name);
 			return -1;
 		}
 
-		/* append to the whole name */
-		in_name_len += label_len + (*in_name ? 1 : 0); // '.' if not first
-
-		in_name = (char *) realloc(in_name, in_name_len + 1);
-		if (in_name == NULL) {
-			DEBUG(1, L, "llmnr: realloc() failed");
+		/* A complete DNS name, including label lengths and root, is <= 255 bytes. */
+		if (wire_name_len + 1 + label_len + 1 > 255) {
+			DEBUG(1, L, "llmnr: name exceeds DNS wire-format limit");
 			return -1;
 		}
-		if (*in_name) strcat(in_name, ".");
-		strncat(in_name, (const char *) in_name_p + 1, label_len);
+		wire_name_len += label_len + 1;
+
+		if (memchr(in_name_p + 1, '\0', label_len)) {
+			DEBUG(1, L, "llmnr: label contains a NUL byte");
+			return -1;
+		}
+		if (in_name_len) in_name[in_name_len++] = '.';
+		if (label_len > sizeof in_name - in_name_len - 1) {
+			DEBUG(1, L, "llmnr: decoded name too large");
+			return -1;
+		}
+		memcpy(in_name + in_name_len, in_name_p + 1, label_len);
+		in_name_len += label_len;
+		in_name[in_name_len] = '\0';
 
 		/* next label */
 		in_name_p += label_len + 1;
-	}
-
-	/* verify in_name_len */
-	if (in_name_len != strlen(in_name)) {
-		DEBUG(1, L, "llmnr: bad name length %ld != %ld", in_name_len, strlen(in_name));
-		free(in_name);
-		return -1;
 	}
 
 	char abuf[_ADDRSTRLEN];
@@ -228,14 +228,12 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 	/* Need the name terminator plus the 4 bytes of QTYPE and QCLASS. */
 	if (in_name_p >= in_end || (size_t) (in_end - in_name_p) < 5) {
 		DEBUG(1, L, "llmnr: question section truncated");
-		free(in_name);
 		return -1;
 	}
 
 	qtype = in_name_p[1] * 256 + in_name_p[2];
 	if (qtype != DNS_TYPE_ANY && qtype != DNS_TYPE_A && qtype != DNS_TYPE_AAAA) {
 		DEBUG(1, L, "llmnr: record in question not of type ANY or A or AAAA: %#x", qtype);
-		free(in_name);
 		return -1;
 	}
 
@@ -243,7 +241,6 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 	qclass = in_name_p[3] * 256 + in_name_p[4];
 	if (qclass != DNS_CLASS_IN) {
 		DEBUG(1, L, "llmnr: record is not of class IN");
-		free(in_name);
 		return -1;
 	}
 
@@ -274,11 +271,8 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 
 	if (!found) {
 	    DEBUG(2, L, "llmnr: not authoritative for name %s", in_name);
-	    free(in_name);
 	    return -1;
 	}
-
-	free(in_name);
 
 	/*
 	 * start building up the LLMNR response
