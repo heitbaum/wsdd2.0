@@ -627,7 +627,7 @@ static void help(const char *prog, int ec, const char *fmt, ...)
 		va_end(ap);
 		puts("\n");
 	}
-	printf( "WSDD and LLMNR daemon\n"
+	printf( "WSDD and LLMNR daemon %s\n"
 		"Usage: %s [options]\n"
 		"       -h this message\n"
 		"       -d become daemon\n"
@@ -646,7 +646,7 @@ static void help(const char *prog, int ec, const char *fmt, ...)
 		"       -B \"name list\" set netbios aliases (%s)\n"
 		"       -G <name> set workgroup (%s)\n"
 		"       -b \"key1:val1,key2:val2,...\" boot parameters:\n",
-		prog, debug_L, debug_W, ifname ? ifname : "any",
+		WSDD_VERSION, prog, debug_L, debug_W, ifname ? ifname : "any",
 		hostname, hostaliases, netbiosname, netbiosaliases, workgroup
 	);
 	printBootInfoKeys(stdout, 11);
@@ -796,7 +796,7 @@ int main(int argc, char **argv)
 	}
 
 	openlog(prog, LOG_PID, LOG_USER);
-	LOG(LOG_INFO, "starting.");
+	LOG(LOG_INFO, "starting wsdd2 %s.", WSDD_VERSION);
 
 again:
 	{} /* Necessary to satisfy C syntax for statement labeling. */

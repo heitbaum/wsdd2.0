@@ -1,4 +1,4 @@
-# wsdd2 (1.8.x)
+# wsdd2 (1.9.0)
 WSD/LLMNR Discovery/Name Service Daemon
 
 With Microsoft turning off SMB1 feature completely on Windows 10, any Samba shares on the

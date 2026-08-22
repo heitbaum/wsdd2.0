@@ -1,3 +1,10 @@
+wsdd2 (1.9.0) stable; urgency=medium
+
+  * Improve WSD metadata correctness and network parser safety.
+  * Bound WSD TCP and LLMNR request handling for router deployments.
+
+ -- Andrea Pesaresi <andreapesaresi82@gmail.com>  Sat, 22 Aug 2026 02:15:28 +0200
+
 wsdd2 (1.8) stable; urgency=medium
 
   * Fix CPU spinner on disconnected endpoint socket.
