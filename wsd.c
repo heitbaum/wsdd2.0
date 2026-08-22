@@ -241,9 +241,9 @@ static struct {
 	{ .key	= "model:",	._default = "unknown"},
 	{ .key	= "serial:",	._default = "0"},
 	{ .key	= "sku:",	._default = "unknown"},
-	{ .key	= "vendorurl:",	._default = NULL},
-	{ .key	= "modelurl:",	._default = NULL},
-	{ .key	= "presentationurl:",	._default = NULL},
+	{ .key	= "vendorurl:",	._default = ""},
+	{ .key	= "modelurl:",	._default = ""},
+	{ .key	= "presentationurl:",	._default = ""},
 	{}
 };
 
