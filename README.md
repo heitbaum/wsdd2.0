@@ -1,4 +1,4 @@
-# wsdd2 (1.9.0)
+# wsdd2 (1.9.1)
 WSD/LLMNR Discovery/Name Service Daemon
 
 With Microsoft turning off SMB1 feature completely on Windows 10, any Samba shares on the
@@ -29,7 +29,7 @@ https://github.com/openwrt/packages/tree/master/net/wsdd2
 Consumed by this archlinux user repository package:
 https://aur.archlinux.org/packages/wsdd2/
 
-## Changes in `1.9.0` compared with `master`
+## Changes in `1.9.x` compared with `master`
 
 This branch is based on `master` commit `b676d8a` and adds the following
 functional commits, listed in history order:
@@ -100,3 +100,12 @@ Source: [oldium/wsdd2 pull request #1](https://github.com/oldium/wsdd2/pull/1)
 - Updates the project and Debian package version to 1.9.0.
 - Exposes the version in `wsdd2 -h` output and in the daemon startup log, making
   it possible to verify the installed build directly on a target device.
+
+### `06af692` - Fix WSD identity, metadata, and fault responses
+
+- Initializes the WSD identity for TCP-only operation, producing valid endpoint
+  UUIDs and instance identifiers without requiring a UDP listener.
+- Safely parses blank boot metadata lines, trims line endings, and lets explicit
+  `-b` values override metadata read from `/proc/sys/dev/boot/info`.
+- Sends SOAP fault responses with one consistent HTTP header and the correct
+  `Content-Length` value.

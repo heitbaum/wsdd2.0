@@ -1,3 +1,11 @@
+wsdd2 (1.9.1) stable; urgency=medium
+
+  * Initialize WSD identity in TCP-only mode.
+  * Harden boot metadata parsing and honor command-line overrides.
+  * Send SOAP faults with consistent HTTP framing.
+
+ -- Andrea Pesaresi <andreapesaresi82@gmail.com>  Sat, 22 Aug 2026 11:08:25 +0200
+
 wsdd2 (1.9.0) stable; urgency=medium
 
   * Improve WSD metadata correctness and network parser safety.
