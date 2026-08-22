@@ -251,6 +251,7 @@ int set_getresp(const char *str, const char **next)
 {
 	int i;
 	const char *p, *val;
+	char *value;
 	size_t keylen, vallen;
 
 	if (str == NULL) {
@@ -262,23 +263,24 @@ int set_getresp(const char *str, const char **next)
 	}
 
 	/* Trim leading space. */
-	while (*str && isspace(*str))
+	while (*str && isspace((unsigned char)*str))
 		str++;
 	if (!*str) {
-		*next = str;
+		if (next)
+			*next = str;
 		return 0;
 	}
 
 	/* Look for end of key. */
-	for (p = str; *p && !isspace(*p) && *p != ':' && *p != ','; p++)
+	for (p = str; *p && !isspace((unsigned char)*p) && *p != ':' && *p != ','; p++)
 		;
 
-	if (!*p || (!isspace(*p) && *p != ':'))
+	if (!*p || (!isspace((unsigned char)*p) && *p != ':'))
 		goto exit;
 	keylen = p++ - str;
 
 	/* Look for value. */
-	while (*p && isspace(*p))
+	while (*p && isspace((unsigned char)*p))
 		p++;
 	if (!*p || *p == ':')
 		goto exit;
@@ -291,8 +293,10 @@ int set_getresp(const char *str, const char **next)
 		p++;
 
 	vallen = p - val;
+	while (vallen && (val[vallen - 1] == '\r' || val[vallen - 1] == '\n'))
+		vallen--;
 	if (next)
-		*next = *p ? ++p : NULL;;
+		*next = *p ? ++p : NULL;
 
 	/* Look for key in lookup table. */
 	for (i = 0; bootinfo[i].key; i++)
@@ -302,8 +306,12 @@ int set_getresp(const char *str, const char **next)
 	if (!bootinfo[i].key)
 		return -1;
 
-	if (!bootinfo[i].value)
-		bootinfo[i].value = strndup(val, vallen);
+	value = strndup(val, vallen);
+	if (!value)
+		return -1;
+
+	free(bootinfo[i].value);
+	bootinfo[i].value = value;
 
 	return 0;
 
@@ -337,8 +345,16 @@ void init_getresp(void)
 		FILE *fp = fopen("/proc/sys/dev/boot/info", "r");
 		if (fp) {
 			char buf[80];
-			while (fgets(buf, sizeof(buf), fp))
-				set_getresp(buf, NULL);
+			while (fgets(buf, sizeof(buf), fp)) {
+				buf[strcspn(buf, "\r\n")] = '\0';
+				const char *entry = buf;
+				while (*entry) {
+					const char *next = NULL;
+					if (set_getresp(entry, &next) != 0 || !next)
+						break;
+					entry = next;
+				}
+			}
 			fclose(fp);
 		}
 		getresp_inited = true;
@@ -549,6 +565,9 @@ static int wsd_send_msg(int fd, struct endpoint *ep, const _saddr_t *sa,
 	return ret != (int) msglen;
 }
 
+static int send_http_resp_header(int fd, struct endpoint *ep,
+				const _saddr_t *sa, int status, size_t length);
+
 /*
  * wsd soap fault
  */
@@ -594,7 +613,9 @@ static int wsd_send_soap_fault(int fd, struct endpoint *ep, _saddr_t *sa,
 		return -1;
 	}
 
-	rv = wsd_send_msg(fd, ep, sa, s, len, 0);
+	rv = send_http_resp_header(fd, ep, sa, code, (size_t) len);
+	if (rv == 0)
+		rv = wsd_send_msg(fd, ep, sa, s, (size_t) len, 0);
 
 	free(s);
 	return rv;
@@ -1166,7 +1187,7 @@ static int wsd_http_message_ready(struct endpoint *ep, const char *buf,
 #undef __FUNCTION__
 }
 
-int wsd_init(struct endpoint *ep)
+static int wsd_identity_init(struct endpoint *ep)
 {
 	if (!wsd_instance)
 		time(&wsd_instance);
@@ -1175,13 +1196,25 @@ int wsd_init(struct endpoint *ep)
 	if (!wsd_endpoint[0]) {
 		uuid_endpoint(wsd_endpoint);
 		if (!wsd_endpoint[0]) {
-			ep->errstr = "wsd_init: uuid_endpoint";
+			ep->errstr = "wsd_identity_init: uuid_endpoint";
 			ep->_errno = errno;
 			return -1;
 		}
 	}
 
+	return 0;
+}
+
+int wsd_init(struct endpoint *ep)
+{
+	if (wsd_identity_init(ep) != 0)
+		return -1;
 	return wsd_send_hello(ep);
+}
+
+int wsd_http_init(struct endpoint *ep)
+{
+	return wsd_identity_init(ep);
 }
 
 static int wsd_recv_action(int (*f)(int fd,
@@ -1237,10 +1270,11 @@ static int wsd_process_message(int fd, struct endpoint *ep, _saddr_t *sa,
 		}
 
 		if (status > 200) {
-			send_http_resp_header(fd, ep, sa, status, 0);
 			if (status >= 400)
 				wsd_send_soap_fault(fd, ep, sa, status,
 					ep->errstr, ep->errstr);
+			else
+				send_http_resp_header(fd, ep, sa, status, 0);
 			return 0;
 		}
 	}
@@ -1310,11 +1344,12 @@ void wsd_tcp_dispatch(fd_set *fds, int *ready)
 			wsd_process_message(client->fd, client->ep, &client->sa,
 					client->buf, (ssize_t) client->len);
 		} else {
-			send_http_resp_header(client->fd, client->ep, &client->sa,
-					status, 0);
 			if (status >= 400)
 				wsd_send_soap_fault(client->fd, client->ep, &client->sa,
 						status, client->ep->errstr, client->ep->errstr);
+			else
+				send_http_resp_header(client->fd, client->ep, &client->sa,
+						status, 0);
 		}
 		wsd_tcp_client_close(client);
 	}

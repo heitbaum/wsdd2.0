@@ -130,6 +130,7 @@ struct service {
 
 // wsd.c
 int wsd_init(struct endpoint *);
+int wsd_http_init(struct endpoint *);
 int wsd_recv(struct endpoint *);
 bool wsd_tcp_prepare(fd_set *, int *, struct timeval *);
 void wsd_tcp_dispatch(fd_set *, int *);

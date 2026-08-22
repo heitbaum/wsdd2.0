@@ -107,6 +107,7 @@ static struct service services[] = {
 		.type	= SOCK_STREAM,
 		.port_name	= "wsdd",
 		.port_num	= 3702,
+		.init	= wsd_http_init,
 		.recv	= wsd_recv,
 	},
 	{
@@ -115,6 +116,7 @@ static struct service services[] = {
 		.type	= SOCK_STREAM,
 		.port_name	= "wsdd",
 		.port_num	= 3702,
+		.init	= wsd_http_init,
 		.recv	= wsd_recv,
 	},
 	{
