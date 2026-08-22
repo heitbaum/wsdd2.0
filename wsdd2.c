@@ -47,6 +47,7 @@
 #include <arpa/inet.h> // inet_ntop()
 #include <net/if.h> // if_indextoname()
 #include <netinet/in.h> // IPPROTO_IP
+#include <netinet/tcp.h> // TCP_DEFER_ACCEPT
 #include <ifaddrs.h> // struct ifaddrs, getifaddrs()
 #include <linux/netlink.h> // NETLINK_ROUTE
 #include <linux/rtnetlink.h> // RTMGRP_LINK
@@ -471,11 +472,18 @@ static int open_ep(struct endpoint **epp, struct service *sv, const struct ifadd
 		}
 	}
 
-	if (ep->type == SOCK_STREAM && listen(ep->sock, 5)) {
-		ep->errstr = __FUNCTION__ ": listen";
-		ep->_errno = errno;
-		close(ep->sock);
-		return -1;
+	if (ep->type == SOCK_STREAM) {
+#ifdef TCP_DEFER_ACCEPT
+		int defer_accept = 1;
+		setsockopt(ep->sock, IPPROTO_TCP, TCP_DEFER_ACCEPT,
+			&defer_accept, sizeof defer_accept);
+#endif
+		if (listen(ep->sock, 5)) {
+			ep->errstr = __FUNCTION__ ": listen";
+			ep->_errno = errno;
+			close(ep->sock);
+			return -1;
+		}
 	}
 
 	return 0;
@@ -951,8 +959,13 @@ again:
 
 		do {
 			fd_set rfds = fds;
-			n = select(nfds + 1, &rfds, NULL, NULL, NULL);
+			struct timeval timeout;
+			struct timeval *timeoutp =
+				wsd_tcp_prepare(&rfds, &nfds, &timeout) ? &timeout : NULL;
+			n = select(nfds + 1, &rfds, NULL, NULL, timeoutp);
 			DEBUG(4, W, "select: n=%d", n);
+			if (n >= 0)
+				wsd_tcp_dispatch(&rfds, &n);
 			for (ep = endpoints; n > 0 && ep; ep = ep->next) {
 				if (!FD_ISSET(ep->sock, &rfds))
 					continue;
@@ -986,6 +999,7 @@ end:
 		baderrno = badep->_errno;
 	}
 
+	wsd_tcp_close_all();
 	while (endpoints) {
 		struct endpoint *tempep = endpoints->next;
 		close_ep(endpoints);

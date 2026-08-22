@@ -56,6 +56,7 @@
 #include "wsd.h" // struct wsd_req_info, WSD_ACTION_HELLO
 
 #include <stdbool.h> // bool
+#include <stdint.h> // int64_t
 #include <stdio.h> // FILE, fopen(), fscanf(), snprintf(), asprintf()
 #include <stdlib.h> // srand48(), strtoul()
 #include <unistd.h> // usleep()
@@ -67,9 +68,79 @@
 #include <arpa/inet.h> // inet_ntop()
 
 #define UUIDLEN	37
+#define WSD_TCP_MAX_CLIENTS 4
+#define WSD_TCP_BUFFER_SIZE 10000
+#define WSD_TCP_REQUEST_TIMEOUT_MS 2000
 
 static time_t wsd_instance;
 static char wsd_sequence[UUIDLEN], wsd_endpoint[UUIDLEN];
+
+struct wsd_tcp_client {
+	bool used;
+	int fd;
+	struct endpoint *ep;
+	_saddr_t sa;
+	size_t len;
+	int64_t deadline_ms;
+	char buf[WSD_TCP_BUFFER_SIZE];
+};
+
+static struct wsd_tcp_client wsd_tcp_clients[WSD_TCP_MAX_CLIENTS];
+
+static int64_t monotonic_ms(void)
+{
+	struct timespec now;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+		return 0;
+	return (int64_t) now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
+
+static void wsd_tcp_client_close(struct wsd_tcp_client *client)
+{
+	if (!client->used)
+		return;
+	close(client->fd);
+	client->used = false;
+}
+
+bool wsd_tcp_prepare(fd_set *fds, int *nfds, struct timeval *timeout)
+{
+	int64_t now = monotonic_ms();
+	int64_t wait_ms = -1;
+
+	for (size_t i = 0; i < ARRAY_SIZE(wsd_tcp_clients); i++) {
+		struct wsd_tcp_client *client = &wsd_tcp_clients[i];
+
+		if (!client->used)
+			continue;
+		if (client->deadline_ms <= now) {
+			DEBUG(2, W, "WSD TCP request timed out");
+			wsd_tcp_client_close(client);
+			continue;
+		}
+
+		FD_SET(client->fd, fds);
+		if (*nfds < client->fd)
+			*nfds = client->fd;
+
+		int64_t remaining = client->deadline_ms - now;
+		if (wait_ms < 0 || remaining < wait_ms)
+			wait_ms = remaining;
+	}
+
+	if (wait_ms < 0)
+		return false;
+	timeout->tv_sec = wait_ms / 1000;
+	timeout->tv_usec = (wait_ms % 1000) * 1000;
+	return true;
+}
+
+void wsd_tcp_close_all(void)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(wsd_tcp_clients); i++)
+		wsd_tcp_client_close(&wsd_tcp_clients[i]);
+}
 
 static void uuid_endpoint(char uuid[UUIDLEN]);
 
@@ -1004,6 +1075,97 @@ again:
 #undef	__FUNCTION__
 }
 
+/*
+ * Check whether a complete, bounded HTTP request is buffered.  This is kept
+ * separate from wsd_parse_http_header() so a partial TCP request never makes
+ * the main event loop perform a blocking recv().
+ */
+static int wsd_http_message_ready(struct endpoint *ep, const char *buf,
+				size_t len, size_t bsize)
+{
+#define __FUNCTION__ "wsd_http_message_ready"
+	const char *header_end = memmem(buf, len, "\r\n\r\n", 4);
+
+	if (!header_end) {
+		if (len < bsize - 1)
+			return 0;
+		ep->errstr = __FUNCTION__ ": Header too large";
+		return 400;
+	}
+
+	const char *request_end = memmem(buf, (size_t) (header_end - buf) + 2,
+				"\r\n", 2);
+	if (!request_end) {
+		ep->errstr = __FUNCTION__ ": Invalid request line";
+		return 400;
+	}
+	if ((size_t) (request_end - buf) < 5 || memcmp(buf, "POST ", 5) != 0) {
+		ep->errstr = __FUNCTION__ ": Only POST method supported";
+		return 405;
+	}
+
+	bool have_content_length = false;
+	size_t content_length = 0;
+	const char *line = request_end + 2;
+
+	while (line < header_end) {
+		const char *line_end = memmem(line,
+				(size_t) (header_end + 2 - line), "\r\n", 2);
+		if (!line_end) {
+			ep->errstr = __FUNCTION__ ": Invalid header line";
+			return 400;
+		}
+
+		const char *colon = memchr(line, ':', (size_t) (line_end - line));
+		if (colon && (size_t) (colon - line) == strlen("Content-Length") &&
+				strncasecmp(line, "Content-Length", strlen("Content-Length")) == 0) {
+			if (have_content_length) {
+				ep->errstr = __FUNCTION__ ": Duplicate Content-Length";
+				return 400;
+			}
+			have_content_length = true;
+
+			const char *value = colon + 1;
+			while (value < line_end && (*value == ' ' || *value == '\t'))
+				value++;
+			if (value == line_end) {
+				ep->errstr = __FUNCTION__ ": Invalid Content-Length";
+				return 400;
+			}
+
+			for (; value < line_end && *value >= '0' && *value <= '9'; value++) {
+				size_t digit = (size_t) (*value - '0');
+				if (content_length > (bsize - 1 - digit) / 10) {
+					ep->errstr = __FUNCTION__ ": Content-Length too large";
+					return 400;
+				}
+				content_length = content_length * 10 + digit;
+			}
+			while (value < line_end && (*value == ' ' || *value == '\t'))
+				value++;
+			if (value != line_end) {
+				ep->errstr = __FUNCTION__ ": Invalid Content-Length";
+				return 400;
+			}
+		}
+		line = line_end + 2;
+	}
+
+	if (!have_content_length || !content_length) {
+		ep->errstr = __FUNCTION__ ": Invalid Content-Length";
+		return 400;
+	}
+
+	size_t header_length = (size_t) (header_end - buf) + 4;
+	if (content_length > bsize - 1 - header_length) {
+		ep->errstr = __FUNCTION__ ": HTTP request too large";
+		return 400;
+	}
+
+	return len >= header_length + content_length ? 1 : 0;
+#undef __FUNCTION__
+}
+
 int wsd_init(struct endpoint *ep)
 {
 	if (!wsd_instance)
@@ -1052,61 +1214,33 @@ static int wsd_recv_action(int (*f)(int fd,
 	return f(fd, ep, sa, info, ip);
 }
 
-int wsd_recv(struct endpoint *ep)
+static int wsd_process_message(int fd, struct endpoint *ep, _saddr_t *sa,
+				char *buf, ssize_t len)
 {
-	char buf[10000];
-	_saddr_t sa = {};
-	socklen_t slen = (ep->family == AF_INET) ? sizeof sa.in : sizeof sa.in6;
-	int fd = ep->sock;
-	ssize_t len;
-
-	if (ep->type == SOCK_STREAM) {
-		struct timeval to = { .tv_sec = 1, .tv_usec = 0};
-
-		fd = accept(ep->sock, (struct sockaddr *)&sa, &slen);
-		if (fd < 0) {
-			ep->errstr = "wsd_recv: accept";
-			ep->_errno = errno;
-			return -1;
-		}
-		if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &to, sizeof to) < 0) {
-			DEBUG(3, W, "Unable to set receive timeout\n");
-		}
-		len = recv(fd, buf, sizeof buf - 1, 0);
-	} else {
-		len = recvfrom(fd, buf, sizeof buf - 1, 0, (struct sockaddr *)&sa, &slen);
-	}
-
-	if (len <= 0) {
-		if (ep->sock != fd)
-			close(fd);
-		return len;
-	}
-
 	buf[len] = '\0';
 
 	{
 		char ip[_ADDRSTRLEN];
-		inet_ntop(sa.ss.ss_family, _SIN_ADDR(&sa), ip, sizeof ip);
-		DEBUG(3, W, "WSD-FROM %s port %u (fd=%d,len=%ld): '%s'\n", ip, _SIN_PORT(&sa), fd, len, buf);
+		inet_ntop(sa->ss.ss_family, _SIN_ADDR(sa), ip, sizeof ip);
+		DEBUG(3, W, "WSD-FROM %s port %u (fd=%d,len=%ld): '%s'\n", ip, _SIN_PORT(sa), fd, len, buf);
 	}
 
 	if (ep->type == SOCK_STREAM && strncmp(buf, "POST ", 5) == 0) {
-		int status = wsd_parse_http_header(fd, ep, buf, len, sizeof buf);
+		int status = wsd_parse_http_header(fd, ep, buf, len,
+				WSD_TCP_BUFFER_SIZE);
 
 		{
 			char ip[_ADDRSTRLEN];
-			inet_ntop(sa.ss.ss_family, _SIN_ADDR(&sa), ip, sizeof ip);
-			DEBUG(3, W, "WSD-BODY %s port %u (fd=%d,status=%d,len=%ld): '%s'\n", ip, _SIN_PORT(&sa),
+			inet_ntop(sa->ss.ss_family, _SIN_ADDR(sa), ip, sizeof ip);
+			DEBUG(3, W, "WSD-BODY %s port %u (fd=%d,status=%d,len=%ld): '%s'\n", ip, _SIN_PORT(sa),
 				fd, status, strlen(buf), buf);
 		}
 
 		if (status > 200) {
-			send_http_resp_header(fd, ep, &sa, status, 0);
+			send_http_resp_header(fd, ep, sa, status, 0);
 			if (status >= 400)
-				wsd_send_soap_fault(fd, ep, &sa, status, ep->errstr, ep->errstr);
-			if (ep->sock != fd)
-				close(fd);
+				wsd_send_soap_fault(fd, ep, sa, status,
+					ep->errstr, ep->errstr);
 			return 0;
 		}
 	}
@@ -1116,23 +1250,23 @@ int wsd_recv(struct endpoint *ep)
 
 	{
 		char src[_ADDRSTRLEN];
-		inet_ntop(sa.ss.ss_family, _SIN_ADDR(&sa), src, sizeof src);
+		inet_ntop(sa->ss.ss_family, _SIN_ADDR(sa), src, sizeof src);
 		const char *action = info && info->action ? strrchr(info->action, '/') : "NONE";
 		if (!action) action = info->action;
 		const char *address = info && info->address ? info->address : NULL;
-		DEBUG(2, W, "WSD-ACTION %s port %u %s %s %s", src, _SIN_PORT(&sa),
+		DEBUG(2, W, "WSD-ACTION %s port %u %s %s %s", src, _SIN_PORT(sa),
 			ep->service->name, action, address);
 	}
 
 	switch (wsd_action_id(info)) {
 	case WSD_ACTION_PROBE:
-		rv = wsd_recv_action(wsd_send_probe_match, fd, ep, &sa, info);
+		rv = wsd_recv_action(wsd_send_probe_match, fd, ep, sa, info);
 		break;
 	case WSD_ACTION_RESOLVE:
-		rv = wsd_recv_action(wsd_send_resolve_match, fd, ep, &sa, info);
+		rv = wsd_recv_action(wsd_send_resolve_match, fd, ep, sa, info);
 		break;
 	case WSD_ACTION_GET:
-		rv = wsd_recv_action(wsd_send_get_response, fd, ep, &sa, info);
+		rv = wsd_recv_action(wsd_send_get_response, fd, ep, sa, info);
 		break;
 	default:
 		DEBUG(2, W, "wsd_recv: Unsupported query");
@@ -1143,9 +1277,103 @@ int wsd_recv(struct endpoint *ep)
 		DEBUG(1, W, "wsd_recv: %s: %s", ep->errstr, strerror(ep->_errno));
 
 	wsd_req_destruct(info);
-	if (ep->sock != fd)
-		close(fd);
 	return 0;
+}
+
+void wsd_tcp_dispatch(fd_set *fds, int *ready)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(wsd_tcp_clients); i++) {
+		struct wsd_tcp_client *client = &wsd_tcp_clients[i];
+
+		if (!client->used || !FD_ISSET(client->fd, fds))
+			continue;
+		if (*ready > 0)
+			(*ready)--;
+
+		ssize_t len = recv(client->fd, client->buf + client->len,
+				sizeof client->buf - client->len - 1, 0);
+		if (len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+			continue;
+		if (len <= 0) {
+			wsd_tcp_client_close(client);
+			continue;
+		}
+
+		client->len += (size_t) len;
+		client->buf[client->len] = '\0';
+		int status = wsd_http_message_ready(client->ep, client->buf,
+				client->len, sizeof client->buf);
+		if (!status)
+			continue;
+
+		if (status == 1) {
+			wsd_process_message(client->fd, client->ep, &client->sa,
+					client->buf, (ssize_t) client->len);
+		} else {
+			send_http_resp_header(client->fd, client->ep, &client->sa,
+					status, 0);
+			if (status >= 400)
+				wsd_send_soap_fault(client->fd, client->ep, &client->sa,
+						status, client->ep->errstr, client->ep->errstr);
+		}
+		wsd_tcp_client_close(client);
+	}
+}
+
+static int wsd_tcp_accept(struct endpoint *ep)
+{
+	_saddr_t sa = {};
+	socklen_t slen = (ep->family == AF_INET) ? sizeof sa.in : sizeof sa.in6;
+	int fd = accept4(ep->sock, (struct sockaddr *)&sa, &slen,
+			SOCK_CLOEXEC | SOCK_NONBLOCK);
+
+	if (fd < 0) {
+		if (errno == EBADF || errno == EINVAL || errno == ENOTSOCK) {
+			ep->errstr = "wsd_recv: accept";
+			ep->_errno = errno;
+			return -1;
+		}
+		DEBUG(2, W, "wsd_recv: transient accept error: %s", strerror(errno));
+		return 0;
+	}
+
+	struct wsd_tcp_client *client = NULL;
+	for (size_t i = 0; i < ARRAY_SIZE(wsd_tcp_clients); i++) {
+		if (!wsd_tcp_clients[i].used) {
+			client = &wsd_tcp_clients[i];
+			break;
+		}
+	}
+	if (!client || fd >= FD_SETSIZE) {
+		DEBUG(2, W, "WSD TCP client limit reached");
+		close(fd);
+		return 0;
+	}
+
+	*client = (struct wsd_tcp_client) {
+		.used = true,
+		.fd = fd,
+		.ep = ep,
+		.sa = sa,
+		.deadline_ms = monotonic_ms() + WSD_TCP_REQUEST_TIMEOUT_MS,
+	};
+	return 0;
+}
+
+int wsd_recv(struct endpoint *ep)
+{
+	if (ep->type == SOCK_STREAM)
+		return wsd_tcp_accept(ep);
+
+	char buf[WSD_TCP_BUFFER_SIZE];
+	_saddr_t sa = {};
+	socklen_t slen = (ep->family == AF_INET) ? sizeof sa.in : sizeof sa.in6;
+	ssize_t len = recvfrom(ep->sock, buf, sizeof buf - 1, 0,
+			(struct sockaddr *)&sa, &slen);
+
+	if (len <= 0)
+		return len;
+	return wsd_process_message(ep->sock, ep, &sa, buf, len);
 }
 
 void wsd_exit(struct endpoint *ep)

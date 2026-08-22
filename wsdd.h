@@ -29,6 +29,7 @@
 #include <netinet/in.h> // struct sockaddr_in, struct ip_mreq
 #include <linux/in.h> // struct ip_mreqn
 #include <linux/netlink.h> // struct sockaddr_nl
+#include <sys/select.h> // fd_set, struct timeval
 #include <time.h> // time_t, time()
 
 /* wsdd2.c */
@@ -128,6 +129,9 @@ struct service {
 // wsd.c
 int wsd_init(struct endpoint *);
 int wsd_recv(struct endpoint *);
+bool wsd_tcp_prepare(fd_set *, int *, struct timeval *);
+void wsd_tcp_dispatch(fd_set *, int *);
+void wsd_tcp_close_all(void);
 void wsd_exit(struct endpoint *);
 
 void init_getresp(void);
