@@ -94,3 +94,9 @@ Source: [oldium/wsdd2 pull request #1](https://github.com/oldium/wsdd2/pull/1)
   pointers to string formatting functions.
 - Prevents undefined behavior on router C libraries and avoids exposing the
   literal text `(null)` in WSD metadata returned to Windows.
+
+### `661a775` - Release version 1.9.0
+
+- Updates the project and Debian package version to 1.9.0.
+- Exposes the version in `wsdd2 -h` output and in the daemon startup log, making
+  it possible to verify the installed build directly on a target device.
