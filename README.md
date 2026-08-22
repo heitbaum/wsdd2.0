@@ -28,3 +28,69 @@ https://github.com/openwrt/packages/tree/master/net/wsdd2
 
 Consumed by this archlinux user repository package:
 https://aur.archlinux.org/packages/wsdd2/
+
+## Changes in `various-fixes` compared with `master`
+
+This branch is based on `master` commit `b676d8a` and adds the following
+functional commits, listed in history order:
+
+### `36269b1` - Fix bounds checks in network packet parsers
+
+Source: [oldium/wsdd2 pull request #2](https://github.com/oldium/wsdd2/pull/2)
+
+- Rejects WSD HTTP requests without a complete request line instead of
+  dereferencing a missing line terminator.
+- Validates LLMNR label and question boundaries before reading them, preventing
+  truncated network packets from causing out-of-bounds reads.
+
+### `9e25b38` - Fix WSD device metadata parsing and response
+
+Source: [oldium/wsdd2 pull request #1](https://github.com/oldium/wsdd2/pull/1)
+
+- Treats only a comma as the separator between `-b` metadata entries, allowing
+  URL values to contain colons.
+- Removes an off-by-one error that could retain a metadata delimiter.
+- Reports the configured device serial number instead of a hard-coded value.
+- Documents the accepted metadata format and the relevant DPWS specification.
+
+### `1a326c9` - Avoid misaligned sockaddr union casts
+
+- Reads IPv4 and IPv6 addresses from their native `sockaddr` structures instead
+  of casting them to a more strictly aligned union.
+- Verifies that interface addresses and netmasks use the expected address
+  family. This is especially relevant on strict-alignment router CPUs.
+
+### `45de58c` - Fix fragmented HTTP header buffer compaction
+
+- Resets parser state after every partial read and validates the number of bytes
+  consumed before compacting the buffer.
+- Prevents a remotely supplied fragmented WSD HTTP header from causing an
+  integer underflow, invalid `memmove()`, and process termination.
+
+### `12bb452` - Disable unimplemented LLMNR TCP listeners
+
+- Removes the IPv4 and IPv6 TCP port 5355 listeners because the handler did not
+  implement `accept()` or DNS-over-TCP framing.
+- LLMNR multicast and unicast replies over UDP port 5355 remain available.
+
+### `0f1d2ff` - Bound nonblocking WSD TCP request handling
+
+- Handles WSD HTTP clients without blocking the main discovery event loop.
+- Limits the server to four concurrent clients, 10,000 bytes per request, and a
+  two-second total request deadline, with deferred TCP accept where supported.
+- A slow, incomplete, or disconnected client is closed locally and no longer
+  restarts the complete service or delays WSD/LLMNR UDP processing.
+
+### `9d2b6b4` - Bound LLMNR DNS name parsing
+
+- Replaces repeated heap reallocation with a fixed 256-byte name buffer and
+  linear-time parsing.
+- Enforces the DNS limits of 63 bytes per label and 255 bytes for the complete
+  wire-format name, and rejects embedded NUL bytes and truncated questions.
+
+### `42c3621` - Avoid null optional WSD metadata values
+
+- Uses empty strings for missing optional metadata URLs instead of passing NULL
+  pointers to string formatting functions.
+- Prevents undefined behavior on router C libraries and avoids exposing the
+  literal text `(null)` in WSD metadata returned to Windows.
