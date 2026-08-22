@@ -29,7 +29,7 @@ https://github.com/openwrt/packages/tree/master/net/wsdd2
 Consumed by this archlinux user repository package:
 https://aur.archlinux.org/packages/wsdd2/
 
-## Changes in `various-fixes` compared with `master`
+## Changes in `1.9.0` compared with `master`
 
 This branch is based on `master` commit `b676d8a` and adds the following
 functional commits, listed in history order:
