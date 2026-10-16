@@ -247,7 +247,11 @@ static struct {
 	{}
 };
 
-int set_getresp(const char *str, const char **next)
+/*
+ * Parse one "key:value" entry.  With fill_only set, an entry whose key
+ * already has a value is consumed but not stored.
+ */
+static int parse_getresp(const char *str, const char **next, bool fill_only)
 {
 	int i;
 	const char *p, *val;
@@ -306,6 +310,9 @@ int set_getresp(const char *str, const char **next)
 	if (!bootinfo[i].key)
 		return -1;
 
+	if (fill_only && bootinfo[i].value)
+		return 0;
+
 	value = strndup(val, vallen);
 	if (!value)
 		return -1;
@@ -319,6 +326,11 @@ exit:
 	if (next)
 		*next = p;
 	return -1;
+}
+
+int set_getresp(const char *str, const char **next)
+{
+	return parse_getresp(str, next, false);
 }
 
 const char *get_getresp(const char *key)
@@ -348,9 +360,10 @@ void init_getresp(void)
 			while (fgets(buf, sizeof(buf), fp)) {
 				buf[strcspn(buf, "\r\n")] = '\0';
 				const char *entry = buf;
+				/* the command line takes precedence over boot info */
 				while (*entry) {
 					const char *next = NULL;
-					if (set_getresp(entry, &next) != 0 || !next)
+					if (parse_getresp(entry, &next, true) != 0 || !next)
 						break;
 					entry = next;
 				}
