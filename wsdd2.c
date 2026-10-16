@@ -776,7 +776,7 @@ int main(int argc, char **argv)
 {
 	int opt;
 	const char *prog = basename(argv[0]);
-	unsigned int ipv46 = 0, tcpudp = 0, llmnrwsdd = 0;
+	volatile unsigned int ipv46 = 0, tcpudp = 0, llmnrwsdd = 0;
 	bool print_help = false;
 
 	while ((opt = getopt(argc, argv, "hd46utlwLWi:H:A:N:B:G:b:c:")) != -1) {
@@ -924,8 +924,9 @@ again:
 		err(EXIT_FAILURE, "getifaddrs()");
 
 	fd_set fds;
-	int rv = 0, nfds = -1;
-	struct endpoint *ep, *badep = NULL;
+	volatile int rv = 0;
+	int nfds = -1;
+	struct endpoint *ep, *volatile badep = NULL;
 
 	FD_ZERO(&fds);
 
