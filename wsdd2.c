@@ -307,7 +307,7 @@ static int open_ep(struct endpoint **epp, struct service *sv, const struct ifadd
 		err(EXIT_FAILURE, __FUNCTION__ ": calloc");
 	}
 
-	strncpy(ep->ifname, ifa->ifa_name, sizeof(ep->ifname));
+	strncpy(ep->ifname, ifa->ifa_name, sizeof(ep->ifname) - 1);
 	ep->service = sv;
 	ep->family = sv->family;
 	ep->type = sv->type;
