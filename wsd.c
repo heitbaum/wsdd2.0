@@ -488,7 +488,7 @@ static struct wsd_req_info *wsd_req_parse(const char *xml)
 	if (!msgid)
 		return NULL;
 
-	struct wsd_req_info *info = (struct wsd_req_info *) calloc(sizeof *info, 1);
+	struct wsd_req_info *info = (struct wsd_req_info *) calloc(1, sizeof *info);
 	if (!info)
 		return NULL;
 

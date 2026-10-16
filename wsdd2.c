@@ -301,7 +301,7 @@ static int open_ep(struct endpoint **epp, struct service *sv, const struct ifadd
 #define __FUNCTION__	"open_ep"
 	const unsigned int disable = 0, enable = 1;
 
-	struct endpoint *ep = (struct endpoint *) calloc(sizeof(*ep), 1);
+	struct endpoint *ep = (struct endpoint *) calloc(1, sizeof(*ep));
 	if ((*epp = ep) == NULL) {
 		errno = ENOMEM;
 		err(EXIT_FAILURE, __FUNCTION__ ": calloc");
