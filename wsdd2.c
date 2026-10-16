@@ -883,7 +883,8 @@ int main(int argc, char **argv)
 		if (pid)
 			exit(EXIT_SUCCESS);
 
-                chdir("/");
+                if (chdir("/") < 0)
+                        err(EXIT_FAILURE, "chdir");
 
                 int fd;
                 if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
