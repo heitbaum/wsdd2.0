@@ -169,7 +169,7 @@ static void set_seed(void)
 	time((time_t *)&seed);
 	
 	for(size_t i = 0; i < 4; ++i) {
-		unsigned long s = UUID[2*i+1] | UUID[2*i+0] << 16;
+		unsigned long s = UUID[2*i+1] | (unsigned long) UUID[2*i+0] << 16;
 		seed ^= s;
 	}
 
