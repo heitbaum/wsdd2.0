@@ -384,7 +384,7 @@ static const char iw_event_cmd_str[][40] = {
     /* Power saving stuff (power management, unicast and multicast) */
     [SIOCSIWPOWER-SIOCIWFIRST]	= "SIOCSIWPOWER",		/* set Power Management settings */
     [SIOCGIWPOWER-SIOCIWFIRST]	= "SIOCGIWPOWER",		/* get Power Management settings */
-    /* WPA : Generic IEEE 802.11 informatiom element (e.g., for WPA/RSN/WMM).
+    /* WPA : Generic IEEE 802.11 information element (e.g., for WPA/RSN/WMM).
      * This ioctl uses struct iw_point and data buffer that includes IE id and len
      * fields. More than one IE may be included in the request. Setting the generic
      * IE to empty buffer (len=0) removes the generic IE from the driver. Drivers

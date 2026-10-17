@@ -20,7 +20,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
    This code is based on the wsdd implementation for Samba by
-   community contributers.
+   community contributors.
 
    The original copyright comment follows.
  */

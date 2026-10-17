@@ -636,7 +636,7 @@ static char *get_smbparm(bool use_testparm, const char *name, const char *_defau
 	free(cmd);
 
 	if (!pp) {
-		DEBUG(0, W, __FUNCTION__ ": can't run testparam");
+		DEBUG(0, W, __FUNCTION__ ": can't run testparm");
 		return strdup(_default);
 	}
 
