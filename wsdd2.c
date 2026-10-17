@@ -2,10 +2,10 @@
    WSDD - Web Service Dynamic Discovery protocol server
 
    Main file for general network handling.
-  
+
 	Copyright (c) 2016 NETGEAR
 	Copyright (c) 2016 Hiro Sugawara
-  
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
@@ -883,16 +883,16 @@ int main(int argc, char **argv)
 		if (pid)
 			exit(EXIT_SUCCESS);
 
-                if (chdir("/") < 0)
-                        err(EXIT_FAILURE, "chdir");
+		if (chdir("/") < 0)
+			err(EXIT_FAILURE, "chdir");
 
-                int fd;
-                if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
-                        dup2(fd, STDIN_FILENO);
-                        dup2(fd, STDOUT_FILENO);
-                        dup2(fd, STDERR_FILENO);
-                        if (fd > STDERR_FILENO) close(fd);
-                }
+		int fd;
+		if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
+			dup2(fd, STDIN_FILENO);
+			dup2(fd, STDOUT_FILENO);
+			dup2(fd, STDERR_FILENO);
+			if (fd > STDERR_FILENO) close(fd);
+		}
 
 		if (setsid() < 0)
 			exit(EXIT_FAILURE);

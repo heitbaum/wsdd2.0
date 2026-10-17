@@ -256,11 +256,11 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 		found = 1;
 
 	for (const char **pp = &hostaliases; !found && pp != &netbiosaliases; pp = &netbiosaliases) {
-	        for (const char *pname = *pp; pname && *pname;) {
+		for (const char *pname = *pp; pname && *pname;) {
 			const char *pend = strchr(pname, ' ');
 			size_t plen = pend ? (size_t) (pend - pname) : strlen(pname);
 			if (plen == in_name_len &&
-                            strncasecmp(pname, in_name, in_name_len) == 0) {
+			    strncasecmp(pname, in_name, in_name_len) == 0) {
 				found = 1;
 				break;
 			}
@@ -270,8 +270,8 @@ static int llmnr_send_response(struct endpoint *ep, _saddr_t *sa,
 	}
 
 	if (!found) {
-	    DEBUG(2, L, "llmnr: not authoritative for name %s", in_name);
-	    return -1;
+		DEBUG(2, L, "llmnr: not authoritative for name %s", in_name);
+		return -1;
 	}
 
 	/*
